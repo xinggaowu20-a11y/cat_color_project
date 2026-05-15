@@ -3,21 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>猫咪毛色识别</title>
+  <title>猫咪毛色批量识别</title>
   <style>
     :root {
       color-scheme: light;
       --ink: #111827;
-      --muted: #697386;
-      --line: #d8dee8;
+      --muted: #667085;
+      --line: #d7dee8;
       --panel: #ffffff;
-      --canvas: #f5f7fb;
+      --canvas: #f4f7fb;
       --soft: #eef3f7;
       --teal: #11776a;
       --teal-dark: #0c5b51;
       --amber: #c98726;
       --coral: #c95643;
-      --blue: #526d8a;
       --danger: #a33422;
       --shadow: 0 18px 42px rgba(24, 31, 44, 0.10);
     }
@@ -36,7 +35,7 @@
     }
 
     .shell {
-      width: min(1180px, calc(100% - 32px));
+      width: min(1240px, calc(100% - 32px));
       margin: 0 auto;
       padding: 26px 0 34px;
     }
@@ -72,9 +71,9 @@
 
     h1 {
       margin: 0;
-      font-size: 36px;
+      font-size: 34px;
       line-height: 1.1;
-      font-weight: 800;
+      font-weight: 850;
     }
 
     .sub {
@@ -92,7 +91,7 @@
       padding: 0 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.74);
+      background: rgba(255, 255, 255, 0.78);
       color: var(--muted);
       font-size: 13px;
       white-space: nowrap;
@@ -113,23 +112,22 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr);
+      grid-template-columns: minmax(360px, 0.86fr) minmax(0, 1.14fr);
       gap: 18px;
-      align-items: stretch;
+      align-items: start;
     }
 
     .panel {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(255, 255, 255, 0.94);
       box-shadow: var(--shadow);
       overflow: hidden;
     }
 
     .uploadPanel {
-      min-height: 620px;
       display: grid;
-      grid-template-rows: minmax(420px, 1fr) auto auto;
+      grid-template-rows: minmax(430px, auto) auto auto;
     }
 
     .dropZone {
@@ -137,22 +135,22 @@
       border: 1.5px dashed #aab5c3;
       border-radius: 8px;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(238, 243, 247, 0.92)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(238, 243, 247, 0.94)),
         var(--soft);
       display: grid;
       place-items: center;
       position: relative;
       overflow: hidden;
       cursor: pointer;
-      min-height: 420px;
-      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+      min-height: 430px;
+      transition: border-color 160ms ease, background 160ms ease;
     }
 
     .dropZone:hover,
     .dropZone.drag {
       border-color: var(--teal);
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(232, 246, 242, 0.92)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(232, 246, 242, 0.94)),
         #eaf6f3;
     }
 
@@ -184,9 +182,9 @@
 
     .dropTitle {
       margin: 0 0 8px;
-      font-size: 23px;
+      font-size: 22px;
       line-height: 1.25;
-      font-weight: 800;
+      font-weight: 850;
     }
 
     .dropText {
@@ -196,16 +194,52 @@
       font-size: 14px;
     }
 
-    #preview {
+    .previewGrid {
       display: none;
       width: 100%;
       height: 100%;
-      object-fit: contain;
-      background: #101820;
+      padding: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      align-content: start;
+      overflow: auto;
     }
 
-    .dropZone.hasImage #preview { display: block; }
-    .dropZone.hasImage .dropInner { display: none; }
+    .dropZone.hasImages {
+      place-items: stretch;
+      background: #101820;
+      border-style: solid;
+    }
+
+    .dropZone.hasImages .dropInner { display: none; }
+    .dropZone.hasImages .previewGrid { display: grid; }
+
+    .thumb {
+      min-width: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #1c2733;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: grid;
+      grid-template-rows: 112px auto;
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 112px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumbName {
+      min-height: 34px;
+      padding: 8px;
+      color: #d9e3ef;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .toolbar {
       display: flex;
@@ -249,7 +283,7 @@
       justify-content: center;
       gap: 8px;
       font-size: 14px;
-      font-weight: 800;
+      font-weight: 850;
       cursor: pointer;
       transition: transform 140ms ease, background 140ms ease, opacity 140ms ease;
     }
@@ -263,8 +297,16 @@
 
     .secondary:hover { background: #dce6ee; }
 
+    .ghost {
+      color: #5a6678;
+      background: transparent;
+      border: 1px solid var(--line);
+    }
+
+    .ghost:hover { background: #f3f6f9; }
+
     .primary {
-      min-width: 112px;
+      min-width: 120px;
       color: #fff;
       background: var(--teal);
     }
@@ -312,7 +354,7 @@
     .resultPanel {
       min-height: 620px;
       display: grid;
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: auto auto 1fr;
     }
 
     .resultHead {
@@ -329,89 +371,133 @@
       line-height: 1.25;
     }
 
-    .rankBadge {
-      border-radius: 999px;
-      padding: 6px 10px;
-      color: #6b4b11;
-      background: #fff2d8;
+    .batchSummary {
+      margin: 18px 20px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbfa;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      min-width: 0;
+    }
+
+    .metricLabel {
+      color: var(--muted);
       font-size: 12px;
-      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .metricValue {
+      font-size: 20px;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .resultList {
+      padding: 18px 20px 20px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .emptyState {
+      min-height: 360px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+      background: #fbfcfe;
+    }
+
+    .resultCard {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      min-height: 142px;
+    }
+
+    .resultImage {
+      width: 132px;
+      height: 100%;
+      min-height: 142px;
+      object-fit: cover;
+      background: #101820;
+    }
+
+    .resultBody {
+      min-width: 0;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .resultTop {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .fileName {
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .winner {
-      margin: 18px 20px 0;
-      padding: 18px 0 18px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      display: grid;
-      grid-template-columns: 70px minmax(0, 1fr);
-      gap: 16px;
-      align-items: center;
-    }
-
-    .winnerSwatch {
-      width: 70px;
-      height: 70px;
-      border-radius: 8px;
-      border: 1px solid rgba(17, 24, 39, 0.16);
-      background: #dce4ea;
-      box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.28);
-    }
-
     .winnerName {
-      margin: 0;
-      font-size: 30px;
+      margin-top: 4px;
+      font-size: 24px;
       line-height: 1.15;
       font-weight: 850;
       overflow-wrap: anywhere;
     }
 
     .winnerCode {
-      margin-top: 7px;
-      color: var(--muted);
-      font-size: 13px;
+      margin-top: 5px;
+      color: #6b7485;
+      font-size: 12px;
       overflow-wrap: anywhere;
     }
 
-    .scoreLine {
-      margin-top: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--teal-dark);
-      font-size: 15px;
-      font-weight: 800;
-    }
-
     .scorePill {
-      min-width: 84px;
       border-radius: 999px;
-      padding: 5px 9px;
+      padding: 6px 10px;
       color: #fff;
       background: var(--teal);
-      text-align: center;
+      font-size: 13px;
+      font-weight: 850;
+      white-space: nowrap;
     }
 
     .bars {
-      padding: 18px 20px 8px;
       display: grid;
-      align-content: start;
-      gap: 12px;
+      gap: 9px;
     }
 
     .barRow {
       display: grid;
-      gap: 7px;
+      gap: 6px;
     }
 
     .barTop {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
       gap: 10px;
       color: #4f5b6f;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .barName {
@@ -419,17 +505,20 @@
       align-items: center;
       gap: 8px;
       min-width: 0;
-      font-weight: 800;
-      overflow-wrap: anywhere;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .barPct {
       color: var(--muted);
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     .barTrack {
-      height: 12px;
+      height: 10px;
       border-radius: 999px;
       background: #e6ebf1;
       overflow: hidden;
@@ -445,17 +534,16 @@
 
     .message {
       margin: 0;
-      padding: 14px 20px 18px;
       color: var(--muted);
       font-size: 14px;
       line-height: 1.6;
     }
 
-    .error { color: var(--danger); font-weight: 800; }
+    .error { color: var(--danger); font-weight: 850; }
 
-    @media (max-width: 860px) {
+    @media (max-width: 940px) {
       .shell {
-        width: min(100% - 22px, 1180px);
+        width: min(100% - 22px, 1240px);
         padding: 16px 0 24px;
       }
 
@@ -467,11 +555,6 @@
       h1 { font-size: 30px; }
 
       .workspace { grid-template-columns: 1fr; }
-
-      .uploadPanel,
-      .resultPanel {
-        min-height: auto;
-      }
 
       .dropZone {
         min-height: 330px;
@@ -486,10 +569,31 @@
 
       .actions {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
       }
 
-      .winnerName { font-size: 25px; }
+      .batchSummary {
+        grid-template-columns: 1fr;
+        margin: 14px 14px 0;
+      }
+
+      .resultList { padding: 14px; }
+    }
+
+    @media (max-width: 620px) {
+      .brand { align-items: flex-start; }
+      .mark { width: 42px; height: 42px; }
+      .actions { grid-template-columns: 1fr; }
+      .previewGrid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+      .thumb { grid-template-rows: 94px auto; }
+      .thumb img { height: 94px; }
+      .resultCard { grid-template-columns: 1fr; }
+      .resultImage {
+        width: 100%;
+        height: 190px;
+        min-height: 190px;
+      }
+      .winnerName { font-size: 22px; }
     }
   </style>
 </head>
@@ -504,8 +608,8 @@
           </svg>
         </div>
         <div>
-          <h1>猫咪毛色识别</h1>
-          <p class="sub">本地 EfficientNet-B0 模型，上传图片后查看毛色判断和置信度。</p>
+          <h1>猫咪毛色批量识别</h1>
+          <p class="sub">一次上传多张图片，本地模型逐张返回毛色类别和 Top 3 置信度。</p>
         </div>
       </div>
       <div class="status" id="status"><span class="dot"></span><span>模型状态检测中</span></div>
@@ -514,7 +618,6 @@
     <main class="workspace">
       <section class="panel uploadPanel">
         <div class="dropZone" id="drop" role="button" tabindex="0" aria-label="上传图片">
-          <img id="preview" alt="待识别图片预览">
           <div class="dropInner">
             <div class="uploadIcon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
@@ -522,17 +625,19 @@
                 <path d="M5 15v2.5A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               </svg>
             </div>
-            <p class="dropTitle">点击上传猫咪图片</p>
-            <p class="dropText">也可以把 JPG、PNG、WEBP 图片拖到这里。</p>
+            <p class="dropTitle">点击上传多张猫咪图片</p>
+            <p class="dropText">支持 JPG、PNG、WEBP，最多一次 50 张。</p>
           </div>
+          <div class="previewGrid" id="previewGrid"></div>
         </div>
 
         <div class="toolbar">
           <div class="fileMeta" id="fileMeta">尚未选择图片</div>
           <div class="actions">
             <button id="choose" type="button" class="secondary">上传图片</button>
-            <input id="file" class="srFile" type="file" accept="image/*">
-            <button id="predict" type="button" class="primary" disabled>开始识别</button>
+            <button id="clear" type="button" class="ghost" disabled>清空</button>
+            <input id="file" class="srFile" type="file" accept="image/*" multiple>
+            <button id="predict" type="button" class="primary" disabled>批量识别</button>
           </div>
         </div>
 
@@ -542,23 +647,27 @@
       <section class="panel resultPanel">
         <div class="resultHead">
           <h2>识别结果</h2>
-          <div class="rankBadge">Top 3</div>
+          <p class="message" id="message">选择图片后点击“批量识别”。</p>
         </div>
 
-        <div class="winner">
-          <div class="winnerSwatch" id="winnerSwatch"></div>
-          <div>
-            <p class="winnerName" id="winnerName">等待图片</p>
-            <div class="winnerCode" id="winnerCode">上传后显示模型类别</div>
-            <div class="scoreLine">
-              <span>置信度</span>
-              <span class="scorePill" id="winnerConf">--</span>
-            </div>
+        <div class="batchSummary">
+          <div class="metric">
+            <div class="metricLabel">待识别</div>
+            <div class="metricValue" id="selectedCount">0 张</div>
+          </div>
+          <div class="metric">
+            <div class="metricLabel">已完成</div>
+            <div class="metricValue" id="doneCount">0 张</div>
+          </div>
+          <div class="metric">
+            <div class="metricLabel">平均置信度</div>
+            <div class="metricValue" id="avgConfidence">--</div>
           </div>
         </div>
 
-        <div class="bars" id="bars"></div>
-        <p class="message" id="message">选择图片后点击“开始识别”。</p>
+        <div class="resultList" id="resultList">
+          <div class="emptyState">批量结果会显示在这里。</div>
+        </div>
       </section>
     </main>
   </div>
@@ -580,19 +689,21 @@
 
     const fileInput = document.querySelector("#file");
     const chooseButton = document.querySelector("#choose");
+    const clearButton = document.querySelector("#clear");
     const predictButton = document.querySelector("#predict");
-    const preview = document.querySelector("#preview");
+    const previewGrid = document.querySelector("#previewGrid");
     const drop = document.querySelector("#drop");
     const fileMeta = document.querySelector("#fileMeta");
-    const winnerSwatch = document.querySelector("#winnerSwatch");
-    const winnerName = document.querySelector("#winnerName");
-    const winnerCode = document.querySelector("#winnerCode");
-    const winnerConf = document.querySelector("#winnerConf");
-    const bars = document.querySelector("#bars");
+    const resultList = document.querySelector("#resultList");
     const message = document.querySelector("#message");
     const statusBox = document.querySelector("#status");
     const classRail = document.querySelector("#classRail");
-    let selectedFile = null;
+    const selectedCount = document.querySelector("#selectedCount");
+    const doneCount = document.querySelector("#doneCount");
+    const avgConfidence = document.querySelector("#avgConfidence");
+
+    let selectedFiles = [];
+    let previewUrls = [];
 
     function formatPct(value) {
       return `${(value * 100).toFixed(2)}%`;
@@ -625,23 +736,55 @@
       fileInput.click();
     }
 
-    function setFile(file) {
-      if (!file || !file.type.startsWith("image/")) {
+    function revokePreviewUrls() {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+      previewUrls = [];
+    }
+
+    function resetResults() {
+      doneCount.textContent = "0 张";
+      avgConfidence.textContent = "--";
+      resultList.innerHTML = '<div class="emptyState">批量结果会显示在这里。</div>';
+    }
+
+    function clearFiles() {
+      selectedFiles = [];
+      revokePreviewUrls();
+      drop.classList.remove("hasImages");
+      previewGrid.innerHTML = "";
+      fileMeta.textContent = "尚未选择图片";
+      selectedCount.textContent = "0 张";
+      predictButton.disabled = true;
+      clearButton.disabled = true;
+      message.textContent = "选择图片后点击“批量识别”。";
+      resetResults();
+    }
+
+    function setFiles(fileList) {
+      const images = Array.from(fileList || []).filter(file => file.type.startsWith("image/")).slice(0, 50);
+      if (!images.length) {
         message.innerHTML = "<span class='error'>请选择图片文件。</span>";
         return;
       }
 
-      selectedFile = file;
-      preview.src = URL.createObjectURL(file);
-      drop.classList.add("hasImage");
+      selectedFiles = images;
+      revokePreviewUrls();
+      previewUrls = selectedFiles.map(file => URL.createObjectURL(file));
+      drop.classList.add("hasImages");
+      previewGrid.innerHTML = selectedFiles.map((file, index) => `
+        <div class="thumb">
+          <img src="${previewUrls[index]}" alt="${escapeHtml(file.name)}">
+          <div class="thumbName" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+        </div>
+      `).join("");
+
+      const totalMb = selectedFiles.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024;
+      fileMeta.textContent = `${selectedFiles.length} 张图片 · ${totalMb.toFixed(2)} MB`;
+      selectedCount.textContent = `${selectedFiles.length} 张`;
       predictButton.disabled = false;
-      fileMeta.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
-      winnerSwatch.style.background = "#dce4ea";
-      winnerName.textContent = "等待识别";
-      winnerCode.textContent = "图片已准备好";
-      winnerConf.textContent = "--";
-      bars.innerHTML = "";
-      message.textContent = "图片已载入，可以开始识别。";
+      clearButton.disabled = false;
+      message.textContent = "图片已载入，可以批量识别。";
+      resetResults();
     }
 
     async function loadHealth() {
@@ -655,15 +798,8 @@
       }
     }
 
-    function renderPredictions(data) {
-      const top = data.prediction;
-      const topMeta = metaFor(top.class_name);
-      winnerSwatch.style.background = topMeta.swatch;
-      winnerName.textContent = topMeta.label;
-      winnerCode.textContent = top.class_name;
-      winnerConf.textContent = formatPct(top.confidence);
-
-      bars.innerHTML = data.top_k.map(item => {
+    function renderBars(items) {
+      return items.map(item => {
         const itemMeta = metaFor(item.class_name);
         const pct = Math.max(0, Math.min(100, item.confidence * 100));
         return `
@@ -675,43 +811,74 @@
               </div>
               <span class="barPct">${formatPct(item.confidence)}</span>
             </div>
-            <div class="barTrack">
-              <div class="barFill" style="width:${pct}%"></div>
-            </div>
+            <div class="barTrack"><div class="barFill" style="width:${pct}%"></div></div>
           </div>
         `;
       }).join("");
-      message.textContent = `文件：${data.filename}`;
     }
 
-    async function predict() {
-      if (!selectedFile) return;
+    function renderBatchResults(results) {
+      const avg = results.reduce((sum, item) => sum + item.prediction.confidence, 0) / Math.max(results.length, 1);
+      doneCount.textContent = `${results.length} 张`;
+      avgConfidence.textContent = formatPct(avg);
+
+      resultList.innerHTML = results.map((item, index) => {
+        const top = item.prediction;
+        const topMeta = metaFor(top.class_name);
+        const imageUrl = previewUrls[index] || "";
+        return `
+          <article class="resultCard">
+            <img class="resultImage" src="${imageUrl}" alt="${escapeHtml(item.filename)}">
+            <div class="resultBody">
+              <div class="resultTop">
+                <div>
+                  <div class="fileName" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
+                  <div class="winnerName">${escapeHtml(topMeta.label)}</div>
+                  <div class="winnerCode">${escapeHtml(top.class_name)}</div>
+                </div>
+                <div class="scorePill">${formatPct(top.confidence)}</div>
+              </div>
+              <div class="bars">${renderBars(item.top_k)}</div>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function predictBatch() {
+      if (!selectedFiles.length) return;
+
       predictButton.disabled = true;
       chooseButton.disabled = true;
+      clearButton.disabled = true;
       predictButton.textContent = "识别中";
-      message.textContent = "正在分析图片，请稍等。";
+      message.textContent = `正在识别 ${selectedFiles.length} 张图片，请稍等。`;
 
       const form = new FormData();
-      form.append("file", selectedFile);
+      selectedFiles.forEach(file => form.append("files", file));
 
       try {
-        const res = await fetch("/predict?top_k=3", { method: "POST", body: form });
+        const res = await fetch("/predict-batch?top_k=3", { method: "POST", body: form });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "识别失败");
+          throw new Error(err.detail || "批量识别失败");
         }
-        renderPredictions(await res.json());
+        const data = await res.json();
+        renderBatchResults(data.results);
+        message.textContent = `已完成 ${data.count} 张图片识别。`;
       } catch (err) {
         message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
       } finally {
         predictButton.disabled = false;
         chooseButton.disabled = false;
-        predictButton.textContent = "开始识别";
+        clearButton.disabled = false;
+        predictButton.textContent = "批量识别";
       }
     }
 
-    fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+    fileInput.addEventListener("change", () => setFiles(fileInput.files));
     chooseButton.addEventListener("click", openPicker);
+    clearButton.addEventListener("click", clearFiles);
     drop.addEventListener("click", openPicker);
     drop.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") {
@@ -719,7 +886,7 @@
         openPicker();
       }
     });
-    predictButton.addEventListener("click", predict);
+    predictButton.addEventListener("click", predictBatch);
 
     ["dragenter", "dragover"].forEach(name => {
       drop.addEventListener(name, event => {
@@ -735,7 +902,7 @@
       });
     });
 
-    drop.addEventListener("drop", event => setFile(event.dataTransfer.files[0]));
+    drop.addEventListener("drop", event => setFiles(event.dataTransfer.files));
 
     renderClassRail();
     loadHealth();

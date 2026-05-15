@@ -455,30 +455,21 @@ def read_image(data: bytes) -> Image.Image:
         raise HTTPException(status_code=400, detail="Invalid image file") from exc
 
 
-@app.get("/health")
-def health():
-    return {
-        "status": "ok",
-        "device": str(DEVICE),
-        "classes": len(class_names),
-        "class_names": class_names,
-    }
-
-
-@app.post("/predict")
-async def predict(file: UploadFile = File(...), top_k: int = 3):
-    if model is None or preprocess is None:
-        raise HTTPException(status_code=503, detail="Model is not loaded")
+def validate_top_k(top_k: int) -> int:
     if top_k < 1:
         raise HTTPException(status_code=400, detail="top_k must be >= 1")
+    return min(top_k, len(class_names))
 
-    image = read_image(await file.read())
+
+def predict_image(image: Image.Image, filename: str, top_k: int):
+    if model is None or preprocess is None:
+        raise HTTPException(status_code=503, detail="Model is not loaded")
+
     tensor = preprocess(image).unsqueeze(0).to(DEVICE)
 
     with torch.inference_mode():
         logits = model(tensor)
         probabilities = torch.softmax(logits, dim=1)[0]
-        top_k = min(top_k, len(class_names))
         scores, indices = torch.topk(probabilities, k=top_k)
 
     predictions = [
@@ -491,7 +482,43 @@ async def predict(file: UploadFile = File(...), top_k: int = 3):
     ]
 
     return {
-        "filename": file.filename,
+        "filename": filename,
         "prediction": predictions[0],
         "top_k": predictions,
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "device": str(DEVICE),
+        "classes": len(class_names),
+        "class_names": class_names,
+    }
+
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...), top_k: int = 3):
+    top_k = validate_top_k(top_k)
+    image = read_image(await file.read())
+    return predict_image(image, file.filename, top_k)
+
+
+@app.post("/predict-batch")
+async def predict_batch(files: list[UploadFile] = File(...), top_k: int = 3):
+    top_k = validate_top_k(top_k)
+    if not files:
+        raise HTTPException(status_code=400, detail="No image files uploaded")
+    if len(files) > 50:
+        raise HTTPException(status_code=400, detail="Upload up to 50 images at a time")
+
+    results = []
+    for file in files:
+        image = read_image(await file.read())
+        results.append(predict_image(image, file.filename, top_k))
+
+    return {
+        "count": len(results),
+        "results": results,
     }
