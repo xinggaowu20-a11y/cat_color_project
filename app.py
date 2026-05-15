@@ -1,3 +1,5 @@
+import json
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -6,6 +8,7 @@ import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from PIL import Image
+from pydantic import BaseModel
 from torchvision import transforms
 
 
@@ -14,8 +17,9 @@ EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
 BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
 MODEL_PATH = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
 INDEX_HTML_PATH = BASE_DIR / "index.html"
+SETTINGS_PATH = BASE_DIR / "runtime_settings.json"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CONFIDENCE_THRESHOLD = 0.5
+DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 UNCERTAIN_CLASS_NAME = "Unknown"
 UNCERTAIN_DISPLAY_NAME = "无法判断"
 
@@ -24,6 +28,11 @@ app = FastAPI(title="Cat Color Recognition API")
 model = None
 class_names = []
 preprocess = None
+confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
+
+
+class ThresholdUpdate(BaseModel):
+    confidence_threshold: float
 
 
 INDEX_HTML = """
@@ -415,6 +424,42 @@ def load_checkpoint():
     return torch.load(MODEL_PATH, map_location=DEVICE)
 
 
+def normalize_threshold(value) -> float:
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("confidence_threshold must be a number") from exc
+
+    if threshold < 0 or threshold > 1:
+        raise ValueError("confidence_threshold must be between 0 and 1")
+
+    return threshold
+
+
+def load_confidence_threshold() -> float:
+    raw_value = DEFAULT_CONFIDENCE_THRESHOLD
+
+    if SETTINGS_PATH.exists():
+        try:
+            payload = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid settings file: {SETTINGS_PATH}") from exc
+        raw_value = payload.get("confidence_threshold", raw_value)
+
+    env_value = os.getenv("CONFIDENCE_THRESHOLD")
+    if env_value not in (None, ""):
+        raw_value = env_value
+
+    return normalize_threshold(raw_value)
+
+
+def save_confidence_threshold(value: float) -> None:
+    SETTINGS_PATH.write_text(
+        json.dumps({"confidence_threshold": value}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def build_model(checkpoint):
     names = checkpoint["class_names"]
     model_name = checkpoint.get("model_name", "efficientnet_b0")
@@ -441,11 +486,12 @@ def build_transform(checkpoint):
 
 @app.on_event("startup")
 def startup():
-    global model, class_names, preprocess
+    global model, class_names, preprocess, confidence_threshold
     checkpoint = load_checkpoint()
     class_names = checkpoint["class_names"]
     preprocess = build_transform(checkpoint)
     model = build_model(checkpoint)
+    confidence_threshold = load_confidence_threshold()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -487,7 +533,7 @@ def predict_image(image: Image.Image, filename: str, top_k: int):
     ]
 
     top_prediction = predictions[0]
-    is_uncertain = top_prediction["confidence"] < CONFIDENCE_THRESHOLD
+    is_uncertain = top_prediction["confidence"] < confidence_threshold
     prediction = {
         "class_index": top_prediction["class_index"],
         "class_name": top_prediction["class_name"],
@@ -511,7 +557,7 @@ def predict_image(image: Image.Image, filename: str, top_k: int):
         "filename": filename,
         "prediction": prediction,
         "top_k": predictions,
-        "threshold": CONFIDENCE_THRESHOLD,
+        "threshold": confidence_threshold,
     }
 
 
@@ -523,7 +569,32 @@ def health():
         "model_path": str(MODEL_PATH),
         "classes": len(class_names),
         "class_names": class_names,
-        "confidence_threshold": CONFIDENCE_THRESHOLD,
+        "confidence_threshold": confidence_threshold,
+    }
+
+
+@app.get("/settings")
+def get_settings():
+    return {
+        "confidence_threshold": confidence_threshold,
+        "settings_path": str(SETTINGS_PATH),
+    }
+
+
+@app.put("/settings")
+def update_settings(payload: ThresholdUpdate):
+    global confidence_threshold
+
+    try:
+        confidence_threshold = normalize_threshold(payload.confidence_threshold)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    save_confidence_threshold(confidence_threshold)
+
+    return {
+        "status": "ok",
+        "confidence_threshold": confidence_threshold,
     }
 
 

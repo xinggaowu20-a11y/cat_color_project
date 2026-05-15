@@ -382,6 +382,59 @@
       gap: 12px;
     }
 
+    .thresholdPanel {
+      margin: 14px 20px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffdf8;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .thresholdMeta {
+      min-width: 0;
+    }
+
+    .thresholdLabel {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .thresholdNote {
+      font-size: 14px;
+      color: var(--ink);
+      line-height: 1.5;
+    }
+
+    .thresholdControls {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .thresholdInput {
+      width: 100px;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 12px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .thresholdInput:focus-visible {
+      outline: 3px solid rgba(17, 119, 106, 0.18);
+      outline-offset: 2px;
+      border-color: var(--teal);
+    }
+
     .metric {
       min-width: 0;
     }
@@ -577,6 +630,21 @@
         margin: 14px 14px 0;
       }
 
+      .thresholdPanel {
+        margin: 14px 14px 0;
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .thresholdControls {
+        width: 100%;
+      }
+
+      .thresholdInput,
+      #thresholdSave {
+        flex: 1 1 0;
+      }
+
       .resultList { padding: 14px; }
     }
 
@@ -665,6 +733,25 @@
           </div>
         </div>
 
+        <div class="thresholdPanel">
+          <div class="thresholdMeta">
+            <div class="thresholdLabel">判断阈值</div>
+            <div class="thresholdNote" id="thresholdHint">当前阈值 0.50，低于该值显示“无法判断”</div>
+          </div>
+          <div class="thresholdControls">
+            <input
+              id="thresholdInput"
+              class="thresholdInput"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value="0.50"
+            >
+            <button id="thresholdSave" type="button" class="secondary">保存阈值</button>
+          </div>
+        </div>
+
         <div class="resultList" id="resultList">
           <div class="emptyState">批量结果会显示在这里。</div>
         </div>
@@ -703,12 +790,20 @@
     const selectedCount = document.querySelector("#selectedCount");
     const doneCount = document.querySelector("#doneCount");
     const avgConfidence = document.querySelector("#avgConfidence");
+    const thresholdInput = document.querySelector("#thresholdInput");
+    const thresholdSave = document.querySelector("#thresholdSave");
+    const thresholdHint = document.querySelector("#thresholdHint");
 
     let selectedFiles = [];
     let previewUrls = [];
+    let healthSnapshot = null;
 
     function formatPct(value) {
       return `${(value * 100).toFixed(2)}%`;
+    }
+
+    function formatThreshold(value) {
+      return Number(value).toFixed(2);
     }
 
     function metaFor(name) {
@@ -749,6 +844,24 @@
           ${escapeHtml(item.label)}
         </span>
       `).join("");
+    }
+
+    function updateThresholdUi(value) {
+      const normalized = Number(value);
+      if (!Number.isFinite(normalized)) {
+        return;
+      }
+
+      thresholdInput.value = formatThreshold(normalized);
+      thresholdHint.textContent = `当前阈值 ${formatThreshold(normalized)}，低于该值显示“无法判断”`;
+    }
+
+    function updateStatus(data) {
+      healthSnapshot = data;
+      statusBox.classList.add("ready");
+      statusBox.querySelector("span:last-child").textContent =
+        `模型已加载 · ${data.classes} 类 · 阈值 ${formatThreshold(data.confidence_threshold)} · ${data.device}`;
+      updateThresholdUi(data.confidence_threshold);
     }
 
     function openPicker() {
@@ -811,10 +924,46 @@
       try {
         const res = await fetch("/health");
         const data = await res.json();
-        statusBox.classList.add("ready");
-        statusBox.querySelector("span:last-child").textContent = `模型已加载 · ${data.classes} 类 · 阈值 ${data.confidence_threshold} · ${data.device}`;
+        updateStatus(data);
       } catch {
         statusBox.querySelector("span:last-child").textContent = "模型状态暂不可用";
+      }
+    }
+
+    async function saveThreshold() {
+      const value = Number(thresholdInput.value);
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        message.innerHTML = "<span class='error'>阈值需要是 0 到 1 之间的数字。</span>";
+        return;
+      }
+
+      thresholdSave.disabled = true;
+      thresholdInput.disabled = true;
+      thresholdHint.textContent = "正在保存阈值...";
+
+      try {
+        const res = await fetch("/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confidence_threshold: value })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "阈值保存失败");
+        }
+
+        const data = await res.json();
+        updateThresholdUi(data.confidence_threshold);
+        if (healthSnapshot) {
+          updateStatus({ ...healthSnapshot, confidence_threshold: data.confidence_threshold });
+        }
+        message.textContent = `阈值已更新为 ${formatThreshold(data.confidence_threshold)}。重新识别后会按新阈值判断。`;
+      } catch (err) {
+        thresholdHint.textContent = "当前阈值保存失败，请稍后重试。";
+        message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+      } finally {
+        thresholdSave.disabled = false;
+        thresholdInput.disabled = false;
       }
     }
 
@@ -907,6 +1056,13 @@
       }
     });
     predictButton.addEventListener("click", predictBatch);
+    thresholdSave.addEventListener("click", saveThreshold);
+    thresholdInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        saveThreshold();
+      }
+    });
 
     ["dragenter", "dragover"].forEach(name => {
       drop.addEventListener(name, event => {

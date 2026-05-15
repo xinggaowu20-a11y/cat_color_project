@@ -1,4 +1,6 @@
 import argparse
+import json
+import os
 from pathlib import Path
 
 import timm
@@ -10,8 +12,9 @@ from torchvision import transforms
 BASE_DIR = Path(__file__).resolve().parent
 EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
 BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+SETTINGS_PATH = BASE_DIR / "runtime_settings.json"
 DEFAULT_MODEL = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
-CONFIDENCE_THRESHOLD = 0.5
+DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 
 
 def load_model(model_path: Path, device: torch.device):
@@ -38,12 +41,29 @@ def build_transform(img_size: int):
     )
 
 
+def load_default_threshold() -> float:
+    raw_value = DEFAULT_CONFIDENCE_THRESHOLD
+
+    if SETTINGS_PATH.exists():
+        try:
+            payload = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        raw_value = payload.get("confidence_threshold", raw_value)
+
+    env_value = os.getenv("CONFIDENCE_THRESHOLD")
+    if env_value not in (None, ""):
+        raw_value = env_value
+
+    return float(raw_value)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Predict cat color from an image.")
     parser.add_argument("image", type=Path, help="Path to the image file.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument("--threshold", type=float, default=CONFIDENCE_THRESHOLD)
+    parser.add_argument("--threshold", type=float, default=load_default_threshold())
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

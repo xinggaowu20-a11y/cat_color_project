@@ -6,3 +6,4 @@ env/
 .env
 .pytest_cache/
 *.log
+runtime_settings.json
