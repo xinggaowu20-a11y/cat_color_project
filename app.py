@@ -50,6 +50,10 @@ class ImageUrlRequest(BaseModel):
     image_url: str
 
 
+class ImageUrlBatchRequest(BaseModel):
+    image_urls: list[str]
+
+
 INDEX_HTML = """
 <!doctype html>
 <html lang="zh-CN">
@@ -724,3 +728,25 @@ def predict_url(payload: ImageUrlRequest, top_k: int = 3):
     result = predict_image(image, filename, top_k)
     result["source_url"] = payload.image_url
     return result
+
+
+@app.post("/predict-url-batch")
+def predict_url_batch(payload: ImageUrlBatchRequest, top_k: int = 3):
+    top_k = validate_top_k(top_k)
+    image_urls = [item.strip() for item in payload.image_urls if item and item.strip()]
+    if not image_urls:
+        raise HTTPException(status_code=400, detail="No image URLs provided")
+    if len(image_urls) > 50:
+        raise HTTPException(status_code=400, detail="Submit up to 50 image URLs at a time")
+
+    results = []
+    for image_url in image_urls:
+        image, filename = fetch_remote_image(image_url)
+        result = predict_image(image, filename, top_k)
+        result["source_url"] = image_url
+        results.append(result)
+
+    return {
+        "count": len(results),
+        "results": results,
+    }

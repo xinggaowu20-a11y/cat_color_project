@@ -270,13 +270,14 @@
 
     .sourceInput {
       min-width: 0;
-      min-height: 42px;
+      min-height: 94px;
       border: 1px solid var(--line);
       border-radius: 7px;
-      padding: 0 14px;
+      padding: 12px 14px;
       font-size: 14px;
       color: var(--ink);
       background: #fff;
+      resize: vertical;
     }
 
     .sourceInput:focus-visible {
@@ -751,16 +752,15 @@
         </div>
 
         <div class="sourcePanel">
-          <div class="sourceLabel">也可以直接粘贴图片地址，服务会下载后识别。</div>
+          <div class="sourceLabel">也可以直接粘贴图片地址，一行一个链接，最多 50 个，服务会下载后批量识别。</div>
           <div class="sourceRow">
-            <input
+            <textarea
               id="imageUrl"
               class="sourceInput"
-              type="url"
-              inputmode="url"
-              placeholder="粘贴 JPG / PNG / WEBP 图片链接"
-            >
-            <button id="predictUrl" type="button" class="ghost">识别链接图片</button>
+              spellcheck="false"
+              placeholder="每行粘贴一个 JPG / PNG / WEBP 图片链接"
+            ></textarea>
+            <button id="predictUrl" type="button" class="ghost">批量识别链接</button>
           </div>
         </div>
 
@@ -867,6 +867,14 @@
       return String(value || "").trim();
     }
 
+    function extractImageUrls(value) {
+      return normalizeImageUrl(value)
+        .split(/\r?\n+/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .slice(0, 50);
+    }
+
     function metaFor(name) {
       return META[name] || { label: name.replaceAll("_", " "), swatch: "#ccd5df" };
     }
@@ -931,7 +939,7 @@
     }
 
     function syncUrlButtonState() {
-      predictUrlButton.disabled = !normalizeImageUrl(imageUrlInput.value);
+      predictUrlButton.disabled = extractImageUrls(imageUrlInput.value).length === 0;
     }
 
     function setBusyState(isBusy) {
@@ -939,7 +947,7 @@
       clearButton.disabled = isBusy || !selectedFiles.length;
       predictButton.disabled = isBusy || !selectedFiles.length;
       imageUrlInput.disabled = isBusy;
-      predictUrlButton.disabled = isBusy || !normalizeImageUrl(imageUrlInput.value);
+      predictUrlButton.disabled = isBusy || extractImageUrls(imageUrlInput.value).length === 0;
       thresholdSave.disabled = isBusy;
       thresholdInput.disabled = isBusy;
     }
@@ -1118,37 +1126,37 @@
     }
 
     async function predictFromUrl() {
-      const imageUrl = normalizeImageUrl(imageUrlInput.value);
-      if (!imageUrl) {
-        message.innerHTML = "<span class='error'>请先粘贴图片链接。</span>";
+      const imageUrls = extractImageUrls(imageUrlInput.value);
+      if (!imageUrls.length) {
+        message.innerHTML = "<span class='error'>请先粘贴至少一个图片链接。</span>";
         return;
       }
 
       setBusyState(true);
       predictUrlButton.textContent = "识别中...";
-      selectedCount.textContent = "1 张";
+      selectedCount.textContent = `${imageUrls.length} 张`;
       doneCount.textContent = "0 张";
       avgConfidence.textContent = "--";
-      message.textContent = "正在下载并识别链接图片，请稍等。";
+      message.textContent = `正在下载并识别 ${imageUrls.length} 个图片链接，请稍等。`;
 
       try {
-        const res = await fetch("/predict-url?top_k=3", {
+        const res = await fetch("/predict-url-batch?top_k=3", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: imageUrl })
+          body: JSON.stringify({ image_urls: imageUrls })
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || "链接图片识别失败");
         }
         const data = await res.json();
-        renderBatchResults([data], [imageUrl]);
-        message.textContent = "链接图片识别完成。";
+        renderBatchResults(data.results, imageUrls);
+        message.textContent = `已完成 ${data.count} 个链接图片识别。`;
       } catch (err) {
         message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
       } finally {
         setBusyState(false);
-        predictUrlButton.textContent = "识别链接图片";
+        predictUrlButton.textContent = "批量识别链接";
       }
     }
 
@@ -1157,7 +1165,7 @@
     clearButton.addEventListener("click", clearFiles);
     imageUrlInput.addEventListener("input", syncUrlButtonState);
     imageUrlInput.addEventListener("keydown", event => {
-      if (event.key === "Enter") {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         predictFromUrl();
       }
