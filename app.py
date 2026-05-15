@@ -538,7 +538,10 @@ def fetch_remote_image(image_url: str) -> tuple[Image.Image, str]:
         with urlopen(request, timeout=REMOTE_IMAGE_TIMEOUT) as response:
             content_type = response.headers.get("Content-Type", "")
             if content_type and not content_type.lower().startswith("image/"):
-                raise HTTPException(status_code=400, detail="Image URL did not return an image")
+                raise HTTPException(
+                    status_code=400,
+                    detail="The URL returned a webpage instead of an image. Please paste a direct JPG/PNG/WEBP image URL.",
+                )
 
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > REMOTE_IMAGE_MAX_BYTES:
@@ -740,13 +743,29 @@ def predict_url_batch(payload: ImageUrlBatchRequest, top_k: int = 3):
         raise HTTPException(status_code=400, detail="Submit up to 50 image URLs at a time")
 
     results = []
+    success_count = 0
     for image_url in image_urls:
-        image, filename = fetch_remote_image(image_url)
-        result = predict_image(image, filename, top_k)
-        result["source_url"] = image_url
-        results.append(result)
+        try:
+            image, filename = fetch_remote_image(image_url)
+            result = predict_image(image, filename, top_k)
+            result["source_url"] = image_url
+            result["error"] = None
+            results.append(result)
+            success_count += 1
+        except HTTPException as exc:
+            parsed = urlparse(image_url)
+            filename = Path(unquote(parsed.path)).name or parsed.hostname or image_url
+            results.append(
+                {
+                    "filename": filename,
+                    "source_url": image_url,
+                    "error": exc.detail,
+                }
+            )
 
     return {
         "count": len(results),
+        "success_count": success_count,
+        "failure_count": len(results) - success_count,
         "results": results,
     }

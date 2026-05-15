@@ -752,7 +752,7 @@
         </div>
 
         <div class="sourcePanel">
-          <div class="sourceLabel">也可以直接粘贴图片地址，一行一个链接，最多 50 个，服务会下载后批量识别。</div>
+          <div class="sourceLabel">也可以直接粘贴图片地址，一行一个链接，最多 50 个。这里只支持 JPG / PNG / WEBP 图片直链，不支持百度图片详情页这类网页链接。</div>
           <div class="sourceRow">
             <textarea
               id="imageUrl"
@@ -869,7 +869,7 @@
 
     function extractImageUrls(value) {
       return normalizeImageUrl(value)
-        .split(/\r?\n+/)
+        .split(/[\r\n,\uFF0C;\uFF1B\s]+/)
         .map(item => item.trim())
         .filter(Boolean)
         .slice(0, 50);
@@ -1071,11 +1071,32 @@
     }
 
     function renderBatchResults(results, imageUrls = previewUrls) {
-      const avg = results.reduce((sum, item) => sum + item.prediction.confidence, 0) / Math.max(results.length, 1);
-      doneCount.textContent = `${results.length} 张`;
-      avgConfidence.textContent = formatPct(avg);
+      const successItems = results.filter(item => item.prediction);
+      const avg = successItems.reduce((sum, item) => sum + item.prediction.confidence, 0) / Math.max(successItems.length, 1);
+      doneCount.textContent = `${successItems.length} / ${results.length}`;
+      avgConfidence.textContent = successItems.length ? formatPct(avg) : "--";
 
       resultList.innerHTML = results.map((item, index) => {
+        if (item.error) {
+          const imageUrl = imageUrls[index] || item.source_url || "";
+          return `
+            <article class="resultCard">
+              <img class="resultImage" src="${imageUrl}" alt="${escapeHtml(item.filename || item.source_url || "链接图片")}">
+              <div class="resultBody">
+                <div class="resultTop">
+                  <div>
+                    <div class="fileName" title="${escapeHtml(item.source_url || item.filename || "")}">${escapeHtml(item.filename || item.source_url || "链接图片")}</div>
+                    <div class="winnerName">识别失败</div>
+                    <div class="winnerCode">${escapeHtml(item.source_url || "")}</div>
+                  </div>
+                  <div class="scorePill" style="background: var(--coral);">失败</div>
+                </div>
+                <p class="message error">${escapeHtml(item.error)}</p>
+              </div>
+            </article>
+          `;
+        }
+
         const top = item.prediction;
         const display = describePrediction(top);
         const imageUrl = imageUrls[index] || "";
@@ -1151,7 +1172,7 @@
         }
         const data = await res.json();
         renderBatchResults(data.results, imageUrls);
-        message.textContent = `已完成 ${data.count} 个链接图片识别。`;
+        message.textContent = `已完成 ${data.count} 个链接图片识别，成功 ${data.success_count} 个，失败 ${data.failure_count} 个。`;
       } catch (err) {
         message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
       } finally {
