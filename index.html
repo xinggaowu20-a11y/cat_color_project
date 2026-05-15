@@ -674,17 +674,19 @@
 
   <script>
     const META = {
-      Black_White_cat: { label: "黑白猫", swatch: "linear-gradient(135deg,#111827 0 50%,#f7f7f2 50% 100%)" },
-      Black_cat: { label: "黑猫", swatch: "#111827" },
-      Blue_White_cat: { label: "蓝白猫", swatch: "linear-gradient(135deg,#6e7f91 0 50%,#f7f7f2 50% 100%)" },
-      Blue_cat: { label: "蓝猫", swatch: "#6e7f91" },
-      Calico_cat: { label: "三花猫", swatch: "linear-gradient(135deg,#f7f7f2 0 33%,#c9762a 33% 66%,#202124 66% 100%)" },
-      Colorpoint_cat: { label: "重点色猫", swatch: "linear-gradient(135deg,#ead8bf 0 55%,#5a4337 55% 100%)" },
-      Orange_Cat: { label: "橘猫", swatch: "#d8892d" },
+      Black: { label: "黑猫", swatch: "#111827" },
+      Black_White: { label: "黑白猫", swatch: "linear-gradient(135deg,#111827 0 50%,#f7f7f2 50% 100%)" },
+      Calico: { label: "三花猫", swatch: "linear-gradient(135deg,#f7f7f2 0 33%,#c9762a 33% 66%,#202124 66% 100%)" },
+      Colorpoint: { label: "重点色猫", swatch: "linear-gradient(135deg,#ead8bf 0 55%,#5a4337 55% 100%)" },
+      Gray: { label: "灰猫", swatch: "#6e7f91" },
+      Gray_White: { label: "灰白猫", swatch: "linear-gradient(135deg,#6e7f91 0 50%,#f7f7f2 50% 100%)" },
+      Orange: { label: "橘猫", swatch: "#d8892d" },
+      Other_Color: { label: "其他花色", swatch: "linear-gradient(135deg,#7f8ea3,#b58c72)" },
       Shaded_Golden: { label: "金渐层", swatch: "linear-gradient(135deg,#f3d58a,#9b6d22)" },
       Shaded_Silver: { label: "银渐层", swatch: "linear-gradient(135deg,#f2f4f7,#8a96a3)" },
       Tortoiseshell: { label: "玳瑁猫", swatch: "linear-gradient(135deg,#211816 0 35%,#a85c28 35% 70%,#6a3f22 70% 100%)" },
-      White_cat: { label: "白猫", swatch: "#f7f7f2" }
+      White: { label: "白猫", swatch: "#f7f7f2" },
+      Unknown: { label: "无法判断", swatch: "linear-gradient(135deg,#9aa6b2,#d6dde6)" }
     };
 
     const fileInput = document.querySelector("#file");
@@ -711,6 +713,24 @@
 
     function metaFor(name) {
       return META[name] || { label: name.replaceAll("_", " "), swatch: "#ccd5df" };
+    }
+
+    function describePrediction(prediction) {
+      if (prediction.is_uncertain) {
+        const rawMeta = metaFor(prediction.raw_class_name);
+        return {
+          label: "无法判断",
+          code: `最高候选：${rawMeta.label} · ${prediction.raw_class_name}`,
+          swatch: metaFor("Unknown").swatch
+        };
+      }
+
+      const topMeta = metaFor(prediction.class_name);
+      return {
+        label: topMeta.label,
+        code: prediction.class_name,
+        swatch: topMeta.swatch
+      };
     }
 
     function escapeHtml(value) {
@@ -792,7 +812,7 @@
         const res = await fetch("/health");
         const data = await res.json();
         statusBox.classList.add("ready");
-        statusBox.querySelector("span:last-child").textContent = `模型已加载 · ${data.classes} 类 · ${data.device}`;
+        statusBox.querySelector("span:last-child").textContent = `模型已加载 · ${data.classes} 类 · 阈值 ${data.confidence_threshold} · ${data.device}`;
       } catch {
         statusBox.querySelector("span:last-child").textContent = "模型状态暂不可用";
       }
@@ -824,7 +844,7 @@
 
       resultList.innerHTML = results.map((item, index) => {
         const top = item.prediction;
-        const topMeta = metaFor(top.class_name);
+        const display = describePrediction(top);
         const imageUrl = previewUrls[index] || "";
         return `
           <article class="resultCard">
@@ -833,8 +853,8 @@
               <div class="resultTop">
                 <div>
                   <div class="fileName" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
-                  <div class="winnerName">${escapeHtml(topMeta.label)}</div>
-                  <div class="winnerCode">${escapeHtml(top.class_name)}</div>
+                  <div class="winnerName">${escapeHtml(display.label)}</div>
+                  <div class="winnerCode">${escapeHtml(display.code)}</div>
                 </div>
                 <div class="scorePill">${formatPct(top.confidence)}</div>
               </div>

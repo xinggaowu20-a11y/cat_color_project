@@ -8,7 +8,10 @@ from torchvision import transforms
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
+BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+DEFAULT_MODEL = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
+CONFIDENCE_THRESHOLD = 0.5
 
 
 def load_model(model_path: Path, device: torch.device):
@@ -40,6 +43,7 @@ def main():
     parser.add_argument("image", type=Path, help="Path to the image file.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--threshold", type=float, default=CONFIDENCE_THRESHOLD)
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -55,7 +59,16 @@ def main():
         top_k = min(max(args.top_k, 1), len(class_names))
         scores, indices = torch.topk(probabilities, k=top_k)
 
-    for rank, (score, index) in enumerate(zip(scores.cpu(), indices.cpu()), start=1):
+    scores_cpu = scores.cpu().tolist()
+    indices_cpu = indices.cpu().tolist()
+    top_score = float(scores_cpu[0])
+    top_name = class_names[int(indices_cpu[0])]
+
+    if top_score < args.threshold:
+        print(f"Top-1 confidence {top_score:.4f} < {args.threshold:.2f}: 无法判断")
+        print(f"Highest candidate: {top_name}")
+
+    for rank, (score, index) in enumerate(zip(scores_cpu, indices_cpu), start=1):
         print(f"{rank}. {class_names[int(index)]}: {float(score):.4f}")
 
 

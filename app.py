@@ -10,9 +10,14 @@ from torchvision import transforms
 
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
+BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+MODEL_PATH = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
 INDEX_HTML_PATH = BASE_DIR / "index.html"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+CONFIDENCE_THRESHOLD = 0.5
+UNCERTAIN_CLASS_NAME = "Unknown"
+UNCERTAIN_DISPLAY_NAME = "无法判断"
 
 app = FastAPI(title="Cat Color Recognition API")
 
@@ -481,10 +486,32 @@ def predict_image(image: Image.Image, filename: str, top_k: int):
         for score, index in zip(scores.cpu(), indices.cpu())
     ]
 
+    top_prediction = predictions[0]
+    is_uncertain = top_prediction["confidence"] < CONFIDENCE_THRESHOLD
+    prediction = {
+        "class_index": top_prediction["class_index"],
+        "class_name": top_prediction["class_name"],
+        "display_name": top_prediction["class_name"],
+        "confidence": top_prediction["confidence"],
+        "is_uncertain": False,
+        "raw_class_index": top_prediction["class_index"],
+        "raw_class_name": top_prediction["class_name"],
+    }
+    if is_uncertain:
+        prediction.update(
+            {
+                "class_index": -1,
+                "class_name": UNCERTAIN_CLASS_NAME,
+                "display_name": UNCERTAIN_DISPLAY_NAME,
+                "is_uncertain": True,
+            }
+        )
+
     return {
         "filename": filename,
-        "prediction": predictions[0],
+        "prediction": prediction,
         "top_k": predictions,
+        "threshold": CONFIDENCE_THRESHOLD,
     }
 
 
@@ -493,8 +520,10 @@ def health():
     return {
         "status": "ok",
         "device": str(DEVICE),
+        "model_path": str(MODEL_PATH),
         "classes": len(class_names),
         "class_names": class_names,
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
     }
 
 
