@@ -1,0 +1,63 @@
+import argparse
+from pathlib import Path
+
+import timm
+import torch
+from PIL import Image
+from torchvision import transforms
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_MODEL = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
+
+
+def load_model(model_path: Path, device: torch.device):
+    checkpoint = torch.load(model_path, map_location=device)
+    class_names = checkpoint["class_names"]
+    model_name = checkpoint.get("model_name", "efficientnet_b0")
+    model = timm.create_model(model_name, pretrained=False, num_classes=len(class_names))
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.to(device)
+    model.eval()
+    return model, class_names, int(checkpoint.get("img_size", 300))
+
+
+def build_transform(img_size: int):
+    return transforms.Compose(
+        [
+            transforms.Resize((img_size, img_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Predict cat color from an image.")
+    parser.add_argument("image", type=Path, help="Path to the image file.")
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--top-k", type=int, default=3)
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model, class_names, img_size = load_model(args.model, device)
+    preprocess = build_transform(img_size)
+
+    image = Image.open(args.image).convert("RGB")
+    tensor = preprocess(image).unsqueeze(0).to(device)
+
+    with torch.inference_mode():
+        logits = model(tensor)
+        probabilities = torch.softmax(logits, dim=1)[0]
+        top_k = min(max(args.top_k, 1), len(class_names))
+        scores, indices = torch.topk(probabilities, k=top_k)
+
+    for rank, (score, index) in enumerate(zip(scores.cpu(), indices.cpu()), start=1):
+        print(f"{rank}. {class_names[int(index)]}: {float(score):.4f}")
+
+
+if __name__ == "__main__":
+    main()

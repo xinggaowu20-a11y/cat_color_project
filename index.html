@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>猫咪毛色识别</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #111827;
+      --muted: #697386;
+      --line: #d8dee8;
+      --panel: #ffffff;
+      --canvas: #f5f7fb;
+      --soft: #eef3f7;
+      --teal: #11776a;
+      --teal-dark: #0c5b51;
+      --amber: #c98726;
+      --coral: #c95643;
+      --blue: #526d8a;
+      --danger: #a33422;
+      --shadow: 0 18px 42px rgba(24, 31, 44, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(17, 119, 106, 0.08), transparent 36%),
+        linear-gradient(225deg, rgba(201, 135, 38, 0.12), transparent 34%),
+        var(--canvas);
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 26px 0 34px;
+    }
+
+    .appbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--amber));
+      box-shadow: 0 12px 24px rgba(17, 119, 106, 0.22);
+      flex: 0 0 auto;
+    }
+
+    .mark svg { width: 27px; height: 27px; }
+
+    h1 {
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.1;
+      font-weight: 800;
+    }
+
+    .sub {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.74);
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(201, 135, 38, 0.16);
+    }
+
+    .status.ready .dot {
+      background: var(--teal);
+      box-shadow: 0 0 0 4px rgba(17, 119, 106, 0.15);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .uploadPanel {
+      min-height: 620px;
+      display: grid;
+      grid-template-rows: minmax(420px, 1fr) auto auto;
+    }
+
+    .dropZone {
+      margin: 16px;
+      border: 1.5px dashed #aab5c3;
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(238, 243, 247, 0.92)),
+        var(--soft);
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      min-height: 420px;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .dropZone:hover,
+    .dropZone.drag {
+      border-color: var(--teal);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(232, 246, 242, 0.92)),
+        #eaf6f3;
+    }
+
+    .dropZone:focus-visible {
+      outline: 3px solid rgba(17, 119, 106, 0.25);
+      outline-offset: 3px;
+    }
+
+    .dropInner {
+      width: min(420px, 88%);
+      text-align: center;
+      padding: 28px;
+    }
+
+    .uploadIcon {
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 18px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--teal);
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 28px rgba(24, 31, 44, 0.08);
+    }
+
+    .uploadIcon svg { width: 38px; height: 38px; }
+
+    .dropTitle {
+      margin: 0 0 8px;
+      font-size: 23px;
+      line-height: 1.25;
+      font-weight: 800;
+    }
+
+    .dropText {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    #preview {
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #101820;
+    }
+
+    .dropZone.hasImage #preview { display: block; }
+    .dropZone.hasImage .dropInner { display: none; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px 16px;
+    }
+
+    .fileMeta {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .srFile {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 7px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease, opacity 140ms ease;
+    }
+
+    button:active { transform: translateY(1px); }
+
+    .secondary {
+      color: var(--ink);
+      background: #e8eef4;
+    }
+
+    .secondary:hover { background: #dce6ee; }
+
+    .primary {
+      min-width: 112px;
+      color: #fff;
+      background: var(--teal);
+    }
+
+    .primary:hover { background: var(--teal-dark); }
+
+    button:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .classRail {
+      border-top: 1px solid var(--line);
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #fbfcfe;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid #dfe5ec;
+      border-radius: 999px;
+      background: #fff;
+      color: #4d596b;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(17, 24, 39, 0.18);
+      background: #ccd5df;
+      flex: 0 0 auto;
+    }
+
+    .resultPanel {
+      min-height: 620px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+    }
+
+    .resultHead {
+      padding: 20px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .resultHead h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .rankBadge {
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #6b4b11;
+      background: #fff2d8;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .winner {
+      margin: 18px 20px 0;
+      padding: 18px 0 18px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+    }
+
+    .winnerSwatch {
+      width: 70px;
+      height: 70px;
+      border-radius: 8px;
+      border: 1px solid rgba(17, 24, 39, 0.16);
+      background: #dce4ea;
+      box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.28);
+    }
+
+    .winnerName {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .winnerCode {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .scoreLine {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--teal-dark);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .scorePill {
+      min-width: 84px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #fff;
+      background: var(--teal);
+      text-align: center;
+    }
+
+    .bars {
+      padding: 18px 20px 8px;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .barRow {
+      display: grid;
+      gap: 7px;
+    }
+
+    .barTop {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      color: #4f5b6f;
+      font-size: 14px;
+    }
+
+    .barName {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .barPct {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .barTrack {
+      height: 12px;
+      border-radius: 999px;
+      background: #e6ebf1;
+      overflow: hidden;
+    }
+
+    .barFill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--teal), var(--amber));
+      transition: width 280ms ease;
+    }
+
+    .message {
+      margin: 0;
+      padding: 14px 20px 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .error { color: var(--danger); font-weight: 800; }
+
+    @media (max-width: 860px) {
+      .shell {
+        width: min(100% - 22px, 1180px);
+        padding: 16px 0 24px;
+      }
+
+      .appbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      h1 { font-size: 30px; }
+
+      .workspace { grid-template-columns: 1fr; }
+
+      .uploadPanel,
+      .resultPanel {
+        min-height: auto;
+      }
+
+      .dropZone {
+        min-height: 330px;
+        margin: 12px;
+      }
+
+      .toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 0 12px 12px;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .winnerName { font-size: 25px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="appbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M5 10.5 4 4l5 3 3-1 3 1 5-3-1 6.5c1.2 1.2 1.8 2.7 1.8 4.3 0 4-3.7 7.2-8.8 7.2S3.2 18.8 3.2 14.8c0-1.6.6-3.1 1.8-4.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+            <path d="M8.2 14h.1M15.7 14h.1M10 17c1.2.8 2.8.8 4 0" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>猫咪毛色识别</h1>
+          <p class="sub">本地 EfficientNet-B0 模型，上传图片后查看毛色判断和置信度。</p>
+        </div>
+      </div>
+      <div class="status" id="status"><span class="dot"></span><span>模型状态检测中</span></div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel uploadPanel">
+        <div class="dropZone" id="drop" role="button" tabindex="0" aria-label="上传图片">
+          <img id="preview" alt="待识别图片预览">
+          <div class="dropInner">
+            <div class="uploadIcon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 16V5m0 0 4 4m-4-4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M5 15v2.5A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <p class="dropTitle">点击上传猫咪图片</p>
+            <p class="dropText">也可以把 JPG、PNG、WEBP 图片拖到这里。</p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="fileMeta" id="fileMeta">尚未选择图片</div>
+          <div class="actions">
+            <button id="choose" type="button" class="secondary">上传图片</button>
+            <input id="file" class="srFile" type="file" accept="image/*">
+            <button id="predict" type="button" class="primary" disabled>开始识别</button>
+          </div>
+        </div>
+
+        <div class="classRail" id="classRail"></div>
+      </section>
+
+      <section class="panel resultPanel">
+        <div class="resultHead">
+          <h2>识别结果</h2>
+          <div class="rankBadge">Top 3</div>
+        </div>
+
+        <div class="winner">
+          <div class="winnerSwatch" id="winnerSwatch"></div>
+          <div>
+            <p class="winnerName" id="winnerName">等待图片</p>
+            <div class="winnerCode" id="winnerCode">上传后显示模型类别</div>
+            <div class="scoreLine">
+              <span>置信度</span>
+              <span class="scorePill" id="winnerConf">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bars" id="bars"></div>
+        <p class="message" id="message">选择图片后点击“开始识别”。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const META = {
+      Black_White_cat: { label: "黑白猫", swatch: "linear-gradient(135deg,#111827 0 50%,#f7f7f2 50% 100%)" },
+      Black_cat: { label: "黑猫", swatch: "#111827" },
+      Blue_White_cat: { label: "蓝白猫", swatch: "linear-gradient(135deg,#6e7f91 0 50%,#f7f7f2 50% 100%)" },
+      Blue_cat: { label: "蓝猫", swatch: "#6e7f91" },
+      Calico_cat: { label: "三花猫", swatch: "linear-gradient(135deg,#f7f7f2 0 33%,#c9762a 33% 66%,#202124 66% 100%)" },
+      Colorpoint_cat: { label: "重点色猫", swatch: "linear-gradient(135deg,#ead8bf 0 55%,#5a4337 55% 100%)" },
+      Orange_Cat: { label: "橘猫", swatch: "#d8892d" },
+      Shaded_Golden: { label: "金渐层", swatch: "linear-gradient(135deg,#f3d58a,#9b6d22)" },
+      Shaded_Silver: { label: "银渐层", swatch: "linear-gradient(135deg,#f2f4f7,#8a96a3)" },
+      Tortoiseshell: { label: "玳瑁猫", swatch: "linear-gradient(135deg,#211816 0 35%,#a85c28 35% 70%,#6a3f22 70% 100%)" },
+      White_cat: { label: "白猫", swatch: "#f7f7f2" }
+    };
+
+    const fileInput = document.querySelector("#file");
+    const chooseButton = document.querySelector("#choose");
+    const predictButton = document.querySelector("#predict");
+    const preview = document.querySelector("#preview");
+    const drop = document.querySelector("#drop");
+    const fileMeta = document.querySelector("#fileMeta");
+    const winnerSwatch = document.querySelector("#winnerSwatch");
+    const winnerName = document.querySelector("#winnerName");
+    const winnerCode = document.querySelector("#winnerCode");
+    const winnerConf = document.querySelector("#winnerConf");
+    const bars = document.querySelector("#bars");
+    const message = document.querySelector("#message");
+    const statusBox = document.querySelector("#status");
+    const classRail = document.querySelector("#classRail");
+    let selectedFile = null;
+
+    function formatPct(value) {
+      return `${(value * 100).toFixed(2)}%`;
+    }
+
+    function metaFor(name) {
+      return META[name] || { label: name.replaceAll("_", " "), swatch: "#ccd5df" };
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function renderClassRail() {
+      classRail.innerHTML = Object.entries(META).map(([name, item]) => `
+        <span class="chip" title="${escapeHtml(name)}">
+          <span class="swatch" style="background:${item.swatch}"></span>
+          ${escapeHtml(item.label)}
+        </span>
+      `).join("");
+    }
+
+    function openPicker() {
+      fileInput.value = "";
+      fileInput.click();
+    }
+
+    function setFile(file) {
+      if (!file || !file.type.startsWith("image/")) {
+        message.innerHTML = "<span class='error'>请选择图片文件。</span>";
+        return;
+      }
+
+      selectedFile = file;
+      preview.src = URL.createObjectURL(file);
+      drop.classList.add("hasImage");
+      predictButton.disabled = false;
+      fileMeta.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      winnerSwatch.style.background = "#dce4ea";
+      winnerName.textContent = "等待识别";
+      winnerCode.textContent = "图片已准备好";
+      winnerConf.textContent = "--";
+      bars.innerHTML = "";
+      message.textContent = "图片已载入，可以开始识别。";
+    }
+
+    async function loadHealth() {
+      try {
+        const res = await fetch("/health");
+        const data = await res.json();
+        statusBox.classList.add("ready");
+        statusBox.querySelector("span:last-child").textContent = `模型已加载 · ${data.classes} 类 · ${data.device}`;
+      } catch {
+        statusBox.querySelector("span:last-child").textContent = "模型状态暂不可用";
+      }
+    }
+
+    function renderPredictions(data) {
+      const top = data.prediction;
+      const topMeta = metaFor(top.class_name);
+      winnerSwatch.style.background = topMeta.swatch;
+      winnerName.textContent = topMeta.label;
+      winnerCode.textContent = top.class_name;
+      winnerConf.textContent = formatPct(top.confidence);
+
+      bars.innerHTML = data.top_k.map(item => {
+        const itemMeta = metaFor(item.class_name);
+        const pct = Math.max(0, Math.min(100, item.confidence * 100));
+        return `
+          <div class="barRow">
+            <div class="barTop">
+              <div class="barName">
+                <span class="swatch" style="background:${itemMeta.swatch}"></span>
+                <span>${escapeHtml(itemMeta.label)} · ${escapeHtml(item.class_name)}</span>
+              </div>
+              <span class="barPct">${formatPct(item.confidence)}</span>
+            </div>
+            <div class="barTrack">
+              <div class="barFill" style="width:${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+      message.textContent = `文件：${data.filename}`;
+    }
+
+    async function predict() {
+      if (!selectedFile) return;
+      predictButton.disabled = true;
+      chooseButton.disabled = true;
+      predictButton.textContent = "识别中";
+      message.textContent = "正在分析图片，请稍等。";
+
+      const form = new FormData();
+      form.append("file", selectedFile);
+
+      try {
+        const res = await fetch("/predict?top_k=3", { method: "POST", body: form });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "识别失败");
+        }
+        renderPredictions(await res.json());
+      } catch (err) {
+        message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+      } finally {
+        predictButton.disabled = false;
+        chooseButton.disabled = false;
+        predictButton.textContent = "开始识别";
+      }
+    }
+
+    fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+    chooseButton.addEventListener("click", openPicker);
+    drop.addEventListener("click", openPicker);
+    drop.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openPicker();
+      }
+    });
+    predictButton.addEventListener("click", predict);
+
+    ["dragenter", "dragover"].forEach(name => {
+      drop.addEventListener(name, event => {
+        event.preventDefault();
+        drop.classList.add("drag");
+      });
+    });
+
+    ["dragleave", "drop"].forEach(name => {
+      drop.addEventListener(name, event => {
+        event.preventDefault();
+        drop.classList.remove("drag");
+      });
+    });
+
+    drop.addEventListener("drop", event => setFile(event.dataTransfer.files[0]));
+
+    renderClassRail();
+    loadHealth();
+  </script>
+</body>
+</html>
