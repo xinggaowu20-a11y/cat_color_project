@@ -1,7 +1,11 @@
 import json
 import os
+import ipaddress
+import socket
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 import timm
 import torch
@@ -27,6 +31,8 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 UNCERTAIN_CLASS_NAME = "Unknown"
 UNCERTAIN_DISPLAY_NAME = "无法判断"
+REMOTE_IMAGE_TIMEOUT = 12
+REMOTE_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 app = FastAPI(title="Cat Color Recognition API")
 
@@ -38,6 +44,10 @@ confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
 
 class ThresholdUpdate(BaseModel):
     confidence_threshold: float
+
+
+class ImageUrlRequest(BaseModel):
+    image_url: str
 
 
 INDEX_HTML = """
@@ -466,6 +476,83 @@ def save_confidence_threshold(value: float) -> None:
     )
 
 
+def is_public_ip(hostname: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return ip.is_global
+    except ValueError:
+        pass
+
+    try:
+        addresses = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise HTTPException(status_code=400, detail="Image URL hostname could not be resolved") from exc
+
+    resolved_ips = set()
+    for entry in addresses:
+        sockaddr = entry[4]
+        if not sockaddr:
+            continue
+        resolved_ips.add(sockaddr[0])
+
+    if not resolved_ips:
+        raise HTTPException(status_code=400, detail="Image URL hostname could not be resolved")
+
+    for raw_ip in resolved_ips:
+        try:
+            if not ipaddress.ip_address(raw_ip).is_global:
+                return False
+        except ValueError:
+            return False
+
+    return True
+
+
+def fetch_remote_image(image_url: str) -> tuple[Image.Image, str]:
+    parsed = urlparse(image_url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="Image URL must start with http:// or https://")
+
+    if not parsed.netloc or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Image URL is invalid")
+
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Image URL cannot include username or password")
+
+    if not is_public_ip(parsed.hostname):
+        raise HTTPException(status_code=400, detail="Image URL must point to a public host")
+
+    request = Request(
+        image_url,
+        headers={
+            "User-Agent": "cat-color-project/1.0",
+            "Accept": "image/*",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=REMOTE_IMAGE_TIMEOUT) as response:
+            content_type = response.headers.get("Content-Type", "")
+            if content_type and not content_type.lower().startswith("image/"):
+                raise HTTPException(status_code=400, detail="Image URL did not return an image")
+
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > REMOTE_IMAGE_MAX_BYTES:
+                raise HTTPException(status_code=400, detail="Image URL is too large")
+
+            data = response.read(REMOTE_IMAGE_MAX_BYTES + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Could not download image from URL") from exc
+
+    if len(data) > REMOTE_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image URL is too large")
+
+    filename = Path(unquote(parsed.path)).name or parsed.hostname
+    return read_image(data), filename
+
+
 def build_model(checkpoint):
     names = checkpoint["class_names"]
     model_name = checkpoint.get("model_name", "efficientnet_b0")
@@ -628,3 +715,12 @@ async def predict_batch(files: list[UploadFile] = File(...), top_k: int = 3):
         "count": len(results),
         "results": results,
     }
+
+
+@app.post("/predict-url")
+def predict_url(payload: ImageUrlRequest, top_k: int = 3):
+    top_k = validate_top_k(top_k)
+    image, filename = fetch_remote_image(payload.image_url)
+    result = predict_image(image, filename, top_k)
+    result["source_url"] = payload.image_url
+    return result

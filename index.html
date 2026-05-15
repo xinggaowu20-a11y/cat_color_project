@@ -249,6 +249,42 @@
       padding: 0 16px 16px;
     }
 
+    .sourcePanel {
+      display: grid;
+      gap: 10px;
+      padding: 0 16px 16px;
+    }
+
+    .sourceLabel {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .sourceRow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .sourceInput {
+      min-width: 0;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 14px;
+      font-size: 14px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .sourceInput:focus-visible {
+      outline: 3px solid rgba(17, 119, 106, 0.18);
+      outline-offset: 2px;
+      border-color: var(--teal);
+    }
+
     .fileMeta {
       min-width: 0;
       color: var(--muted);
@@ -620,6 +656,10 @@
         padding: 0 12px 12px;
       }
 
+      .sourcePanel {
+        padding: 0 12px 12px;
+      }
+
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
@@ -652,6 +692,7 @@
       .brand { align-items: flex-start; }
       .mark { width: 42px; height: 42px; }
       .actions { grid-template-columns: 1fr; }
+      .sourceRow { grid-template-columns: 1fr; }
       .previewGrid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
       .thumb { grid-template-rows: 94px auto; }
       .thumb img { height: 94px; }
@@ -706,6 +747,20 @@
             <button id="clear" type="button" class="ghost" disabled>清空</button>
             <input id="file" class="srFile" type="file" accept="image/*" multiple>
             <button id="predict" type="button" class="primary" disabled>批量识别</button>
+          </div>
+        </div>
+
+        <div class="sourcePanel">
+          <div class="sourceLabel">也可以直接粘贴图片地址，服务会下载后识别。</div>
+          <div class="sourceRow">
+            <input
+              id="imageUrl"
+              class="sourceInput"
+              type="url"
+              inputmode="url"
+              placeholder="粘贴 JPG / PNG / WEBP 图片链接"
+            >
+            <button id="predictUrl" type="button" class="ghost">识别链接图片</button>
           </div>
         </div>
 
@@ -780,6 +835,8 @@
     const chooseButton = document.querySelector("#choose");
     const clearButton = document.querySelector("#clear");
     const predictButton = document.querySelector("#predict");
+    const imageUrlInput = document.querySelector("#imageUrl");
+    const predictUrlButton = document.querySelector("#predictUrl");
     const previewGrid = document.querySelector("#previewGrid");
     const drop = document.querySelector("#drop");
     const fileMeta = document.querySelector("#fileMeta");
@@ -804,6 +861,10 @@
 
     function formatThreshold(value) {
       return Number(value).toFixed(2);
+    }
+
+    function normalizeImageUrl(value) {
+      return String(value || "").trim();
     }
 
     function metaFor(name) {
@@ -869,6 +930,20 @@
       fileInput.click();
     }
 
+    function syncUrlButtonState() {
+      predictUrlButton.disabled = !normalizeImageUrl(imageUrlInput.value);
+    }
+
+    function setBusyState(isBusy) {
+      chooseButton.disabled = isBusy;
+      clearButton.disabled = isBusy || !selectedFiles.length;
+      predictButton.disabled = isBusy || !selectedFiles.length;
+      imageUrlInput.disabled = isBusy;
+      predictUrlButton.disabled = isBusy || !normalizeImageUrl(imageUrlInput.value);
+      thresholdSave.disabled = isBusy;
+      thresholdInput.disabled = isBusy;
+    }
+
     function revokePreviewUrls() {
       previewUrls.forEach(url => URL.revokeObjectURL(url));
       previewUrls = [];
@@ -889,6 +964,7 @@
       selectedCount.textContent = "0 张";
       predictButton.disabled = true;
       clearButton.disabled = true;
+      syncUrlButtonState();
       message.textContent = "选择图片后点击“批量识别”。";
       resetResults();
     }
@@ -916,6 +992,7 @@
       selectedCount.textContent = `${selectedFiles.length} 张`;
       predictButton.disabled = false;
       clearButton.disabled = false;
+      syncUrlButtonState();
       message.textContent = "图片已载入，可以批量识别。";
       resetResults();
     }
@@ -962,8 +1039,7 @@
         thresholdHint.textContent = "当前阈值保存失败，请稍后重试。";
         message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
       } finally {
-        thresholdSave.disabled = false;
-        thresholdInput.disabled = false;
+        setBusyState(false);
       }
     }
 
@@ -986,7 +1062,7 @@
       }).join("");
     }
 
-    function renderBatchResults(results) {
+    function renderBatchResults(results, imageUrls = previewUrls) {
       const avg = results.reduce((sum, item) => sum + item.prediction.confidence, 0) / Math.max(results.length, 1);
       doneCount.textContent = `${results.length} 张`;
       avgConfidence.textContent = formatPct(avg);
@@ -994,7 +1070,7 @@
       resultList.innerHTML = results.map((item, index) => {
         const top = item.prediction;
         const display = describePrediction(top);
-        const imageUrl = previewUrls[index] || "";
+        const imageUrl = imageUrls[index] || "";
         return `
           <article class="resultCard">
             <img class="resultImage" src="${imageUrl}" alt="${escapeHtml(item.filename)}">
@@ -1017,9 +1093,7 @@
     async function predictBatch() {
       if (!selectedFiles.length) return;
 
-      predictButton.disabled = true;
-      chooseButton.disabled = true;
-      clearButton.disabled = true;
+      setBusyState(true);
       predictButton.textContent = "识别中";
       message.textContent = `正在识别 ${selectedFiles.length} 张图片，请稍等。`;
 
@@ -1038,16 +1112,56 @@
       } catch (err) {
         message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
       } finally {
-        predictButton.disabled = false;
-        chooseButton.disabled = false;
-        clearButton.disabled = false;
+        setBusyState(false);
         predictButton.textContent = "批量识别";
+      }
+    }
+
+    async function predictFromUrl() {
+      const imageUrl = normalizeImageUrl(imageUrlInput.value);
+      if (!imageUrl) {
+        message.innerHTML = "<span class='error'>请先粘贴图片链接。</span>";
+        return;
+      }
+
+      setBusyState(true);
+      predictUrlButton.textContent = "识别中...";
+      selectedCount.textContent = "1 张";
+      doneCount.textContent = "0 张";
+      avgConfidence.textContent = "--";
+      message.textContent = "正在下载并识别链接图片，请稍等。";
+
+      try {
+        const res = await fetch("/predict-url?top_k=3", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_url: imageUrl })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "链接图片识别失败");
+        }
+        const data = await res.json();
+        renderBatchResults([data], [imageUrl]);
+        message.textContent = "链接图片识别完成。";
+      } catch (err) {
+        message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+      } finally {
+        setBusyState(false);
+        predictUrlButton.textContent = "识别链接图片";
       }
     }
 
     fileInput.addEventListener("change", () => setFiles(fileInput.files));
     chooseButton.addEventListener("click", openPicker);
     clearButton.addEventListener("click", clearFiles);
+    imageUrlInput.addEventListener("input", syncUrlButtonState);
+    imageUrlInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        predictFromUrl();
+      }
+    });
     drop.addEventListener("click", openPicker);
     drop.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") {
@@ -1056,6 +1170,7 @@
       }
     });
     predictButton.addEventListener("click", predictBatch);
+    predictUrlButton.addEventListener("click", predictFromUrl);
     thresholdSave.addEventListener("click", saveThreshold);
     thresholdInput.addEventListener("keydown", event => {
       if (event.key === "Enter") {
@@ -1081,6 +1196,7 @@
     drop.addEventListener("drop", event => setFiles(event.dataTransfer.files));
 
     renderClassRail();
+    syncUrlButtonState();
     loadHealth();
   </script>
 </body>
