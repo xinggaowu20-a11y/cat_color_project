@@ -1,0 +1,16 @@
+services:
+  cat-color-app:
+    build: .
+    image: cat-color-project:latest
+    container_name: cat-color-project
+    restart: unless-stopped
+    environment:
+      PORT: "7860"
+    ports:
+      - "80:7860"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/health', timeout=5).read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
