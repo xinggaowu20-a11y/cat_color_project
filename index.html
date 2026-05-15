@@ -255,6 +255,20 @@
       padding: 0 16px 16px;
     }
 
+    .sourceHead {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .sourceTitle {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 850;
+      color: var(--ink);
+    }
+
     .sourceLabel {
       color: var(--muted);
       font-size: 13px;
@@ -263,9 +277,9 @@
 
     .sourceRow {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) 188px;
       gap: 10px;
-      align-items: center;
+      align-items: stretch;
     }
 
     .sourceInput {
@@ -284,6 +298,12 @@
       outline: 3px solid rgba(17, 119, 106, 0.18);
       outline-offset: 2px;
       border-color: var(--teal);
+    }
+
+    .sourceActions {
+      display: grid;
+      gap: 10px;
+      align-content: start;
     }
 
     .fileMeta {
@@ -661,6 +681,11 @@
         padding: 0 12px 12px;
       }
 
+      .sourceHead {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
@@ -694,6 +719,7 @@
       .mark { width: 42px; height: 42px; }
       .actions { grid-template-columns: 1fr; }
       .sourceRow { grid-template-columns: 1fr; }
+      .sourceActions { grid-template-columns: 1fr; }
       .previewGrid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
       .thumb { grid-template-rows: 94px auto; }
       .thumb img { height: 94px; }
@@ -741,26 +767,27 @@
           <div class="previewGrid" id="previewGrid"></div>
         </div>
 
-        <div class="toolbar">
-          <div class="fileMeta" id="fileMeta">尚未选择图片</div>
-          <div class="actions">
-            <button id="choose" type="button" class="secondary">上传图片</button>
-            <button id="clear" type="button" class="ghost" disabled>清空</button>
-            <input id="file" class="srFile" type="file" accept="image/*" multiple>
-            <button id="predict" type="button" class="primary" disabled>批量识别</button>
-          </div>
-        </div>
-
         <div class="sourcePanel">
-          <div class="sourceLabel">也可以直接粘贴图片地址，一行一个链接，最多 50 个。这里只支持 JPG / PNG / WEBP 图片直链，不支持百度图片详情页这类网页链接。</div>
+          <div class="sourceHead">
+            <div>
+              <div class="sourceTitle">输入来源</div>
+              <div class="sourceLabel">上传本地图片，或粘贴图片直链，一行一个链接，最多 50 个。这里只支持 JPG / PNG / WEBP 图片直链，不支持百度图片详情页这类网页链接。</div>
+            </div>
+            <div class="fileMeta" id="fileMeta">尚未选择图片或链接</div>
+          </div>
           <div class="sourceRow">
             <textarea
               id="imageUrl"
               class="sourceInput"
               spellcheck="false"
-              placeholder="每行粘贴一个 JPG / PNG / WEBP 图片链接"
+              placeholder="每行粘贴一个 JPG / PNG / WEBP 图片直链，也可以留空只识别本地图片"
             ></textarea>
-            <button id="predictUrl" type="button" class="ghost">批量识别链接</button>
+            <div class="sourceActions">
+              <button id="choose" type="button" class="secondary">上传图片</button>
+              <button id="clear" type="button" class="ghost" disabled>清空</button>
+              <input id="file" class="srFile" type="file" accept="image/*" multiple>
+              <button id="predict" type="button" class="primary" disabled>开始识别</button>
+            </div>
           </div>
         </div>
 
@@ -770,7 +797,7 @@
       <section class="panel resultPanel">
         <div class="resultHead">
           <h2>识别结果</h2>
-          <p class="message" id="message">选择图片后点击“批量识别”。</p>
+          <p class="message" id="message">上传图片或粘贴链接后，点击“开始识别”。</p>
         </div>
 
         <div class="batchSummary">
@@ -836,7 +863,6 @@
     const clearButton = document.querySelector("#clear");
     const predictButton = document.querySelector("#predict");
     const imageUrlInput = document.querySelector("#imageUrl");
-    const predictUrlButton = document.querySelector("#predictUrl");
     const previewGrid = document.querySelector("#previewGrid");
     const drop = document.querySelector("#drop");
     const fileMeta = document.querySelector("#fileMeta");
@@ -855,6 +881,18 @@
     let previewUrls = [];
     let healthSnapshot = null;
 
+    function getSourceState() {
+      const imageUrls = extractImageUrls(imageUrlInput.value);
+      const fileSizeMb = selectedFiles.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024;
+      return {
+        imageUrls,
+        fileCount: selectedFiles.length,
+        urlCount: imageUrls.length,
+        totalCount: selectedFiles.length + imageUrls.length,
+        fileSizeMb
+      };
+    }
+
     function formatPct(value) {
       return `${(value * 100).toFixed(2)}%`;
     }
@@ -869,7 +907,7 @@
 
     function extractImageUrls(value) {
       return normalizeImageUrl(value)
-        .split(/[\r\n,\uFF0C;\uFF1B\s]+/)
+        .split(/\r?\n+/)
         .map(item => item.trim())
         .filter(Boolean)
         .slice(0, 50);
@@ -938,18 +976,43 @@
       fileInput.click();
     }
 
-    function syncUrlButtonState() {
-      predictUrlButton.disabled = extractImageUrls(imageUrlInput.value).length === 0;
+    function updateSourceSummary() {
+      const state = getSourceState();
+      if (!state.totalCount) {
+        fileMeta.textContent = "尚未选择图片或链接";
+        selectedCount.textContent = "0 项";
+        return;
+      }
+
+      const parts = [];
+      if (state.fileCount) {
+        parts.push(`${state.fileCount} 张本地图片 · ${state.fileSizeMb.toFixed(2)} MB`);
+      }
+      if (state.urlCount) {
+        parts.push(`${state.urlCount} 个图片链接`);
+      }
+
+      fileMeta.textContent = parts.join(" · ");
+      selectedCount.textContent = `${state.totalCount} 项`;
+    }
+
+    function syncActionState() {
+      const state = getSourceState();
+      predictButton.disabled = state.totalCount === 0;
+      clearButton.disabled = state.totalCount === 0;
     }
 
     function setBusyState(isBusy) {
       chooseButton.disabled = isBusy;
-      clearButton.disabled = isBusy || !selectedFiles.length;
-      predictButton.disabled = isBusy || !selectedFiles.length;
       imageUrlInput.disabled = isBusy;
-      predictUrlButton.disabled = isBusy || extractImageUrls(imageUrlInput.value).length === 0;
       thresholdSave.disabled = isBusy;
       thresholdInput.disabled = isBusy;
+      if (isBusy) {
+        clearButton.disabled = true;
+        predictButton.disabled = true;
+        return;
+      }
+      syncActionState();
     }
 
     function revokePreviewUrls() {
@@ -968,12 +1031,10 @@
       revokePreviewUrls();
       drop.classList.remove("hasImages");
       previewGrid.innerHTML = "";
-      fileMeta.textContent = "尚未选择图片";
-      selectedCount.textContent = "0 张";
-      predictButton.disabled = true;
-      clearButton.disabled = true;
-      syncUrlButtonState();
-      message.textContent = "选择图片后点击“批量识别”。";
+      imageUrlInput.value = "";
+      updateSourceSummary();
+      syncActionState();
+      message.textContent = "上传图片或粘贴链接后，点击“开始识别”。";
       resetResults();
     }
 
@@ -995,13 +1056,9 @@
         </div>
       `).join("");
 
-      const totalMb = selectedFiles.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024;
-      fileMeta.textContent = `${selectedFiles.length} 张图片 · ${totalMb.toFixed(2)} MB`;
-      selectedCount.textContent = `${selectedFiles.length} 张`;
-      predictButton.disabled = false;
-      clearButton.disabled = false;
-      syncUrlButtonState();
-      message.textContent = "图片已载入，可以批量识别。";
+      updateSourceSummary();
+      syncActionState();
+      message.textContent = "输入已更新，可以开始识别。";
       resetResults();
     }
 
@@ -1119,76 +1176,90 @@
       }).join("");
     }
 
-    async function predictBatch() {
-      if (!selectedFiles.length) return;
-
-      setBusyState(true);
-      predictButton.textContent = "识别中";
-      message.textContent = `正在识别 ${selectedFiles.length} 张图片，请稍等。`;
-
-      const form = new FormData();
-      selectedFiles.forEach(file => form.append("files", file));
-
-      try {
-        const res = await fetch("/predict-batch?top_k=3", { method: "POST", body: form });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "批量识别失败");
-        }
-        const data = await res.json();
-        renderBatchResults(data.results);
-        message.textContent = `已完成 ${data.count} 张图片识别。`;
-      } catch (err) {
-        message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
-      } finally {
-        setBusyState(false);
-        predictButton.textContent = "批量识别";
-      }
-    }
-
-    async function predictFromUrl() {
-      const imageUrls = extractImageUrls(imageUrlInput.value);
-      if (!imageUrls.length) {
-        message.innerHTML = "<span class='error'>请先粘贴至少一个图片链接。</span>";
+    async function predictAll() {
+      const state = getSourceState();
+      if (!state.totalCount) {
+        message.innerHTML = "<span class='error'>请先上传图片或粘贴图片链接。</span>";
         return;
       }
 
       setBusyState(true);
-      predictUrlButton.textContent = "识别中...";
-      selectedCount.textContent = `${imageUrls.length} 张`;
-      doneCount.textContent = "0 张";
+      predictButton.textContent = "识别中";
+      doneCount.textContent = "0 / 0";
       avgConfidence.textContent = "--";
-      message.textContent = `正在下载并识别 ${imageUrls.length} 个图片链接，请稍等。`;
+      updateSourceSummary();
+      message.textContent = `正在识别 ${state.totalCount} 项内容，请稍等。`;
 
-      try {
-        const res = await fetch("/predict-url-batch?top_k=3", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_urls: imageUrls })
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "链接图片识别失败");
+      const mergedResults = [];
+      const mergedImageUrls = [];
+      const errors = [];
+
+      if (state.fileCount) {
+        const form = new FormData();
+        selectedFiles.forEach(file => form.append("files", file));
+
+        try {
+          const res = await fetch("/predict-batch?top_k=3", { method: "POST", body: form });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "本地图片识别失败");
+          }
+          const data = await res.json();
+          mergedResults.push(...data.results);
+          mergedImageUrls.push(...previewUrls);
+        } catch (err) {
+          errors.push(`本地图片：${err.message}`);
         }
-        const data = await res.json();
-        renderBatchResults(data.results, imageUrls);
-        message.textContent = `已完成 ${data.count} 个链接图片识别，成功 ${data.success_count} 个，失败 ${data.failure_count} 个。`;
-      } catch (err) {
-        message.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
-      } finally {
-        setBusyState(false);
-        predictUrlButton.textContent = "批量识别链接";
       }
+
+      if (state.urlCount) {
+        try {
+          const res = await fetch("/predict-url-batch?top_k=3", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_urls: state.imageUrls })
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "图片链接识别失败");
+          }
+          const data = await res.json();
+          mergedResults.push(...data.results);
+          mergedImageUrls.push(...state.imageUrls);
+        } catch (err) {
+          errors.push(`图片链接：${err.message}`);
+        }
+      }
+
+      if (mergedResults.length) {
+        renderBatchResults(mergedResults, mergedImageUrls);
+        const successCount = mergedResults.filter(item => item.prediction).length;
+        const failureCount = mergedResults.length - successCount;
+        if (errors.length) {
+          message.innerHTML = `<span class="error">已完成 ${mergedResults.length} 项识别，但仍有部分来源失败：${escapeHtml(errors.join("；"))}</span>`;
+        } else {
+          message.textContent = `已完成 ${mergedResults.length} 项识别，成功 ${successCount} 项，失败 ${failureCount} 项。`;
+        }
+      } else {
+        resetResults();
+        message.innerHTML = `<span class="error">${escapeHtml(errors.join("；") || "识别失败")}</span>`;
+      }
+
+      setBusyState(false);
+      predictButton.textContent = "开始识别";
     }
 
     fileInput.addEventListener("change", () => setFiles(fileInput.files));
     chooseButton.addEventListener("click", openPicker);
     clearButton.addEventListener("click", clearFiles);
-    imageUrlInput.addEventListener("input", syncUrlButtonState);
+    imageUrlInput.addEventListener("input", () => {
+      updateSourceSummary();
+      syncActionState();
+    });
     imageUrlInput.addEventListener("keydown", event => {
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
-        predictFromUrl();
+        predictAll();
       }
     });
     drop.addEventListener("click", openPicker);
@@ -1198,8 +1269,7 @@
         openPicker();
       }
     });
-    predictButton.addEventListener("click", predictBatch);
-    predictUrlButton.addEventListener("click", predictFromUrl);
+    predictButton.addEventListener("click", predictAll);
     thresholdSave.addEventListener("click", saveThreshold);
     thresholdInput.addEventListener("keydown", event => {
       if (event.key === "Enter") {
@@ -1225,7 +1295,8 @@
     drop.addEventListener("drop", event => setFiles(event.dataTransfer.files));
 
     renderClassRail();
-    syncUrlButtonState();
+    updateSourceSummary();
+    syncActionState();
     loadHealth();
   </script>
 </body>
