@@ -17,7 +17,12 @@ EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
 BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
 MODEL_PATH = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
 INDEX_HTML_PATH = BASE_DIR / "index.html"
-SETTINGS_PATH = BASE_DIR / "runtime_settings.json"
+SETTINGS_PATH = Path(
+    os.getenv(
+        "APP_SETTINGS_PATH",
+        str(Path.home() / ".config" / "cat_color_project" / "runtime_settings.json"),
+    )
+)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 UNCERTAIN_CLASS_NAME = "Unknown"
@@ -454,6 +459,7 @@ def load_confidence_threshold() -> float:
 
 
 def save_confidence_threshold(value: float) -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_PATH.write_text(
         json.dumps({"confidence_threshold": value}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

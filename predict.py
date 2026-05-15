@@ -12,7 +12,12 @@ from torchvision import transforms
 BASE_DIR = Path(__file__).resolve().parent
 EXTERNAL_MODEL_PATH = Path(r"D:\color\best_efficientnet_b0_cat_color.pth")
 BUNDLED_MODEL_PATH = BASE_DIR / "best_efficientnet_b0_cat_color.pth"
-SETTINGS_PATH = BASE_DIR / "runtime_settings.json"
+SETTINGS_PATH = Path(
+    os.getenv(
+        "APP_SETTINGS_PATH",
+        str(Path.home() / ".config" / "cat_color_project" / "runtime_settings.json"),
+    )
+)
 DEFAULT_MODEL = EXTERNAL_MODEL_PATH if EXTERNAL_MODEL_PATH.exists() else BUNDLED_MODEL_PATH
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 
